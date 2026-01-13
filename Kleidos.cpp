@@ -3,39 +3,62 @@
 /**
  * App initialization.
  *
- * Called by user to create a new vault.
+ * Called by the run() function in case there is no vault file.
  * Gets the master password. Generates the cryptographic params,
  * derives the key, creates the header, 
  * and writes the vault file.
  *
- * @TODO: Implement the necessary functions from private part of the class.
- *
  * @return void
  */
 void Kleidos::init() {
-  auto mPass = Kleidos::promptMasterPassword();
-  auto salt = Kleidos::generateRandomBytes(10);
-  auto key = Kleidos::deriveKey(std::string(mPass.begin(), mPass.end()), salt);
+  auto pass = Kleidos::promptMasterPassword();
+  auto salt = Kleidos::generateRandomBytes(16);
   auto nonce = Kleidos::generateRandomBytes(12);
 
+  auto key = Kleidos::deriveKey(std::string(pass.begin(), pass.end()), salt);
   auto header = Kleidos::createVaultHeader(salt, nonce);
 
-  std::println("{}", key);
-  std::println("{}", header);
+  std::vector<uint8_t> ciphertext(canary.size() + crypto_aead_chacha20poly1305_ietf_ABYTES);
+  unsigned long long clen;
 
-  std::memset(mPass.data(), 0, mPass.size());
+  crypto_aead_chacha20poly1305_ietf_encrypt(
+    ciphertext.data(), &clen,
+    reinterpret_cast<const uint8_t*>(canary.data()), canary.size(),
+    header.data(), header.size(),
+    nullptr,
+    nonce.data(),
+    key.data()
+  );
+
+  writeVaultFile("vault.kle", header, ciphertext);
+
+  std::memset(pass.data(), 0, pass.size());
+  sodium_memzero(key.data(), key.size());
 }
 
 /**
- * Prompt & Validate Master Password``
+ * Function called in the entry point which decides if init or unlock is necessary.
  *
- * Disables echo on terminal, promps input, 
+ * @return void
+ */
+void Kleidos::run() {
+  const std::string vaultFile = "vault.kle";
+
+  std::ifstream file(vaultFile, std::ios::binary);
+  if (file.good()) {
+    unlock(vaultFile);
+  } else {
+    init();
+  }
+}
+
+/**
+ * Prompt & Validate Master Password
+ *
+ * Disables echo on terminal, promps input,
  * stores the password in a vector of chars,
  * due to memory behavior of a string
  * restores terminal to standard
- * @TODO: Implement password matching, if database file exists.
- * Possible solution: On beginning of function, an if statement to check if DB file exists, and use that to match the input password.
- * If DB not present, it will use the input password to make it the master password for the DB file.
  *
  * @return std::vector<char> password;
  */
@@ -86,7 +109,11 @@ std::vector<uint8_t> Kleidos::generateRandomBytes(size_t length) {
  *
  * @return std::vector<uint8_t> key
  */
-std::vector<uint8_t> Kleidos::deriveKey(const std::string& password, const std::vector<uint8_t>& salt, size_t keyLen) {
+std::vector<uint8_t> Kleidos::deriveKey(
+  const std::string& password, 
+  const std::vector<uint8_t>& salt, 
+  size_t keyLen
+  ) {
   if (sodium_init() < 0) throw std::runtime_error("libsodium init failed.");
   
   std::vector<uint8_t> key(keyLen);
@@ -94,8 +121,8 @@ std::vector<uint8_t> Kleidos::deriveKey(const std::string& password, const std::
         key.data(), keyLen,
         password.c_str(), password.size(),
         salt.data(),
-        crypto_pwhash_OPSLIMIT_INTERACTIVE,
-        crypto_pwhash_MEMLIMIT_INTERACTIVE,
+        KDF_OPS,
+        KDF_MEM,
         crypto_pwhash_ALG_ARGON2ID13
         ) != 0 ) {
     throw std::runtime_error("Key derivation failed (out of memory?)");
@@ -115,7 +142,10 @@ std::vector<uint8_t> Kleidos::deriveKey(const std::string& password, const std::
  *
  * @return std::vector<uint8_t> header
  */
-std::vector<uint8_t> Kleidos::createVaultHeader(const std::vector<uint8_t>& salt, const std::vector<uint8_t>& nonce) {
+std::vector<uint8_t> Kleidos::createVaultHeader(
+  const std::vector<uint8_t>& salt, 
+  const std::vector<uint8_t>& nonce
+  ) {
   std::vector<uint8_t> header;
   header.reserve(64);
 
@@ -128,9 +158,12 @@ std::vector<uint8_t> Kleidos::createVaultHeader(const std::vector<uint8_t>& salt
   header.push_back(static_cast<uint8_t>(version >> 8));
   header.push_back(static_cast<uint8_t>(version));
 
-  // Argon2id parameters (example values)
-  uint32_t m_cost = 1 << 16;
-  uint32_t t_cost = 3;
+  // KDF algorhithm idenfitier (1 = Argon2id via libsodium)
+  header.push_back(1);
+  
+  // libsodium Argon2id params
+  uint64_t opslimit = KDF_OPS;
+  uint64_t memlimit = KDF_MEM;
   uint32_t parallelism = 1;
 
   auto push_u32 = [&header](uint32_t v) {
@@ -140,8 +173,14 @@ std::vector<uint8_t> Kleidos::createVaultHeader(const std::vector<uint8_t>& salt
     header.push_back(v);
   };
 
-  push_u32(m_cost);
-  push_u32(t_cost);
+  auto push_u64 = [&header](uint64_t v) {
+    for (int i = 7; i >= 0; --i) {
+      header.push_back(static_cast<uint8_t>(v >> (i * 8)));
+    }
+  };
+
+  push_u64(opslimit);
+  push_u64(memlimit);
   push_u32(parallelism);
 
   // Salt
@@ -155,3 +194,228 @@ std::vector<uint8_t> Kleidos::createVaultHeader(const std::vector<uint8_t>& salt
   return header;
 }
 
+/**
+ * Creates a new file, writes header, and the ciphertext
+ *
+ * @param const std::string& filename
+ * @param const std::vector<uint8_t>& header
+ * @param const std::vector<uint8_t>& ciphertext
+ *
+ * @return void
+ */
+void Kleidos::writeVaultFile(
+  const std::string& filename,
+  const std::vector<uint8_t>& header,
+  const std::vector<uint8_t>& ciphertext
+  ) {
+  std::ifstream existing(filename, std::ios::binary);
+  if (existing.good()) {
+    throw std::runtime_error("Vault file already exists");
+  }
+
+  std::ofstream file(
+    filename,
+    std::ios::binary | std::ios::out | std::ios::trunc
+  );
+
+  if (!file) {
+    throw std::runtime_error("Failed to create vault file");
+  }
+
+  file.write(reinterpret_cast<const char*>(header.data()), header.size());
+  if (!file) {
+    throw std::runtime_error("Failed to write vault header");
+  }
+
+  if (!ciphertext.empty()) {
+    file.write(reinterpret_cast<const char*>(ciphertext.data()), ciphertext.size());
+    if (!file) {
+      throw std::runtime_error("Failed to write vault payload");
+    }
+  }
+
+  file.flush();
+  if (!file) {
+    throw std::runtime_error("Failed to flush vault file");
+  }
+}
+
+/**
+ * Helper function to read uint16_t values from the header
+ *
+ * @param std::ifstream& f
+ * @param std::vector<uint8_t>& raw
+ *
+ * @return... some fuckery.
+ */
+uint16_t Kleidos::read_u16(
+  std::ifstream& f,
+  std::vector<uint8_t>& raw
+  ) {
+  uint8_t b[2]; f.read(reinterpret_cast<char*>(b), 2);
+  raw.insert(raw.end(), b, b+2);
+  return (uint16_t(b[0]) << 8) | b[1];
+}
+
+
+/**
+ * Helper function to read uint32_t values from the header
+ *
+ * @param std::ifstream& f
+ * @param std::vector<uint8_t>& raw
+ *
+ * @return... some fuckery.
+ */
+uint32_t Kleidos::read_u32(
+  std::ifstream& f,
+  std::vector<uint8_t>& raw
+  ) {
+  uint8_t b[4]; f.read(reinterpret_cast<char*>(b), 4);
+  raw.insert(raw.end(),b,b+4);
+  return (uint32_t(b[0]) << 24) | (uint32_t(b[1]) << 16) |
+         (uint32_t(b[2]) << 8)  | b[3];
+}
+
+
+/**
+ * Helper function to read uint64_t values from the header
+ *
+ * @param std::ifstream& f
+ * @param std::vector<uint8_t>& raw
+ *
+ * @return v
+ */
+uint64_t Kleidos::read_u64(
+  std::ifstream& f,
+  std::vector<uint8_t>& raw
+  ) {
+  uint8_t b[8]; f.read(reinterpret_cast<char*>(b), 8);
+  raw.insert(raw.end(),b,b+8);
+  uint64_t v = 0;
+  for (int i = 0; i < 8; ++i) v = (v << 8) | b[i];
+  return v;
+}
+
+/**
+ * Function to read the vault file's header for the data necessary.
+ *
+ * @param std::ifstream& file
+ *
+ * @return VaultHeader h
+ */
+Kleidos::VaultHeader Kleidos::readVaultHeader(std::ifstream& file) {
+  VaultHeader h;
+  h.raw.clear();
+
+  // Magic
+  uint8_t magic[4];
+  file.read(reinterpret_cast<char*>(magic),4);
+  h.raw.insert(h.raw.end(),magic,magic+4);
+  if (std::memcmp(magic,"KLEI",4) != 0)
+    throw std::runtime_error("Invalid vault magic");
+  
+  // Version
+  h.version = read_u16(file, h.raw);
+  if (h.version != 1)
+    throw std::runtime_error("Unsupported vault version");
+
+  // KDF id
+  uint8_t kdf;
+  file.read(reinterpret_cast<char*>(&kdf),1);
+  h.raw.push_back(kdf);
+  h.kdf_id = kdf;
+  if (h.kdf_id != 1)
+    throw std::runtime_error("Unsupported KDF");
+
+  // KDF params
+  h.opslimit = read_u64(file, h.raw);
+  h.memlimit = read_u64(file, h.raw);
+  h.parallelism = read_u32(file, h.raw);
+
+  // Salt
+  uint8_t saltLen;
+  file.read(reinterpret_cast<char*>(&saltLen), 1);
+  h.raw.push_back(saltLen);
+  h.salt.resize(saltLen);
+  file.read(reinterpret_cast<char*>(h.salt.data()), saltLen);
+  h.raw.insert(h.raw.end(), h.salt.begin(), h.salt.end());
+
+  // Nonce
+  uint8_t nonceLen;
+  file.read(reinterpret_cast<char*>(&nonceLen),1);
+  h.raw.push_back(nonceLen);
+  h.nonce.resize(nonceLen);
+  file.read(reinterpret_cast<char*>(h.nonce.data()), nonceLen);
+  h.raw.insert(h.raw.end(), h.nonce.begin(), h.nonce.end());
+
+  return h;
+}
+
+/**
+ * Function to unlock the vault for further usage
+ * Called by the run() function in main
+ *
+ * @param const std::string& filename
+ *
+ * @return void
+ */
+void Kleidos::unlock(const std::string& filename) {
+  std::ifstream file(filename, std::ios::binary);
+  if (!file) throw std::runtime_error("Failed to open vault file");
+
+  // 1. Read header
+  VaultHeader header = readVaultHeader(file);
+
+  // 2. Read ciphertext
+  std::vector<uint8_t> ciphertext(
+    std::istreambuf_iterator<char>(file),
+    {}
+  );
+
+  if (ciphertext.size() < crypto_aead_chacha20poly1305_ietf_ABYTES)
+    throw std::runtime_error("Vault ciphertext truncated");
+
+  // 3. Prompt password
+  auto pass = promptMasterPassword();
+
+  // 4. Re-derive key using header params
+  std::vector<uint8_t> key(32);
+  if (crypto_pwhash(
+    key.data(), key.size(),
+    pass.data(), pass.size(),
+    header.salt.data(),
+    header.opslimit,
+    header.memlimit,
+    crypto_pwhash_ALG_ARGON2ID13
+  ) != 0) {
+    throw std::runtime_error("Key derivation failed");
+  };
+
+  // 5. Decrypt canary
+  std::vector<uint8_t> plaintext(ciphertext.size());
+  unsigned long long plen;
+
+  if (crypto_aead_chacha20poly1305_ietf_decrypt(
+    plaintext.data(), &plen,
+    nullptr,
+    ciphertext.data(), ciphertext.size(),
+    header.raw.data(), header.raw.size(),
+    header.nonce.data(),
+    key.data()
+  ) != 0) {
+    throw std::runtime_error("Invalid password or corrupted vault");
+  };
+
+  plaintext.resize(plen);
+
+  // 6. verify canary
+  if (std::string(plaintext.begin(), plaintext.end()) != canary) {
+    throw std::runtime_error("Vault authentication failed");
+  }
+
+  // Cleanup
+  sodium_memzero(key.data(), key.size());
+  sodium_memzero(pass.data(), pass.size());
+
+  std::cout << "Vault unlocked successfuly\n";
+}

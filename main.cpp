@@ -1,8 +1,7 @@
-#include <print>
 #include "Kleidos.h"
 
 int main () {
   Kleidos app;
-  app.init();
+  app.run();
   return 0;
 }
