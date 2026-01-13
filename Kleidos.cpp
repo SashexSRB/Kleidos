@@ -3,7 +3,6 @@
 #include <iostream>
 #include <cstring>
 
-
 /**
  * App initialization.
  *
@@ -33,6 +32,8 @@ void Kleidos::init() {
  * due to memory behavior of a string
  * restores terminal to standard
  * @TODO: Implement password matching, if database file exists.
+ * Possible solution: On beginning of function, an if statement to check if DB file exists, and use that to match the input password.
+ * If DB not present, it will use the input password to make it the master password for the DB file.
  *
  * @return std::vector<char> password;
  */
