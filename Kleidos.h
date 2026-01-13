@@ -19,9 +19,7 @@ class Kleidos {
 
     std::vector<char> promptMasterPassword();
 
-    // Cryptographic setup
     std::vector<uint8_t> generateSalt(size_t length=10);
-    // Hint: generate cryptographically secure random bytes for KDF salt
 
     std::vector<uint8_t> deriveKey(const std::string& password, const std::vector<uint8_t>& salt);
     // Hint: use memory-hard KDF (e.g., Argon2id) with proper parameters

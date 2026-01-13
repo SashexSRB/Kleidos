@@ -2,6 +2,9 @@
 #include <print>
 #include <iostream>
 #include <cstring>
+#include <random>
+#include <fstream>
+#include <stdexcept>
 
 /**
  * App initialization.
@@ -16,10 +19,12 @@
  * @return void
  */
 void Kleidos::init() {
-  std::println("Hello World!");
   auto mPass = Kleidos::promptMasterPassword();
   std::string passStr(mPass.begin(), mPass.end());
   std::println("{}", passStr);
+
+  auto randBytes = Kleidos::generateSalt();
+  std::println("{}", randBytes);
 
   std::memset(mPass.data(), 0, mPass.size());
 }
@@ -55,4 +60,21 @@ std::vector<char> Kleidos::promptMasterPassword() {
   std::cout << "\n";
 
   return password;
+}
+
+/**
+ * Generate cryptograhically secure salt value from /dev/urandom
+ *
+ * Uses Linux' urandom to generate a bytes for the header of the DB file.
+ *
+ * @param size_t length
+ * @return std::vector<uint8_t> salt
+ */
+std::vector<uint8_t> Kleidos::generateSalt(size_t length) {
+  std::vector<uint8_t> salt(length);
+  std::ifstream urandom("/dev/urandom", std::ios::in | std::ios::binary);
+  if (!urandom) throw std::runtime_error("Failed to open /dev/urandom");
+  urandom.read(reinterpret_cast<char*>(salt.data()), length);
+  if (!urandom) throw std::runtime_error("Failed to read enough bytes");
+  return salt;
 }
