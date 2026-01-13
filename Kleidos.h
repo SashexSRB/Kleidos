@@ -1,10 +1,6 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <cstdint>
-#include <termios.h>
-#include <unistd.h>
+#include "KldIncludes.h"
 
 class Kleidos {
   public:
@@ -21,7 +17,7 @@ class Kleidos {
 
     std::vector<uint8_t> generateSalt(size_t length=10);
 
-    std::vector<uint8_t> deriveKey(const std::string& password, const std::vector<uint8_t>& salt);
+    std::vector<uint8_t> deriveKey(const std::string& password, const std::vector<uint8_t>& salt, size_t keyLen=32);
     // Hint: use memory-hard KDF (e.g., Argon2id) with proper parameters
 
     std::vector<uint8_t> generateNonce(size_t length=12);

@@ -1,10 +1,4 @@
 #include "Kleidos.h"
-#include <print>
-#include <iostream>
-#include <cstring>
-#include <random>
-#include <fstream>
-#include <stdexcept>
 
 /**
  * App initialization.
@@ -25,6 +19,9 @@ void Kleidos::init() {
 
   auto randBytes = Kleidos::generateSalt();
   std::println("{}", randBytes);
+
+  auto key = Kleidos::deriveKey(passStr, randBytes);
+  std::println("{}", key);
 
   std::memset(mPass.data(), 0, mPass.size());
 }
@@ -72,9 +69,36 @@ std::vector<char> Kleidos::promptMasterPassword() {
  */
 std::vector<uint8_t> Kleidos::generateSalt(size_t length) {
   std::vector<uint8_t> salt(length);
-  std::ifstream urandom("/dev/urandom", std::ios::in | std::ios::binary);
-  if (!urandom) throw std::runtime_error("Failed to open /dev/urandom");
-  urandom.read(reinterpret_cast<char*>(salt.data()), length);
-  if (!urandom) throw std::runtime_error("Failed to read enough bytes");
+  if (RAND_bytes(salt.data(), static_cast<int>(length)) != 1) {
+    throw std::runtime_error("RAND_bytes failed!");
+  }
   return salt;
+}
+
+/**
+ * Derive a key from the master password and the salt
+ *
+ * Uses libsodium to generate it.
+ *
+ * @param const std::string& password
+ * @param const std::vector<uint8_t>& salt
+ * @param size_t keyLen = 32
+ *
+ * @return std::vector<uint8_t> key
+ */
+std::vector<uint8_t> Kleidos::deriveKey(const std::string& password, const std::vector<uint8_t>& salt, size_t keyLen) {
+  if (sodium_init() < 0) throw std::runtime_error("libsodium init failed.");
+  
+  std::vector<uint8_t> key(keyLen);
+  if(crypto_pwhash(
+        key.data(), keyLen,
+        password.c_str(), password.size(),
+        salt.data(),
+        crypto_pwhash_OPSLIMIT_INTERACTIVE,
+        crypto_pwhash_MEMLIMIT_INTERACTIVE,
+        crypto_pwhash_ALG_ARGON2ID13
+        ) != 0 ) {
+    throw std::runtime_error("Key derivation failed (out of memory?)");
+  }
+  return key;
 }
