@@ -17,10 +17,10 @@ void Kleidos::init() {
   std::string passStr(mPass.begin(), mPass.end());
   std::println("{}", passStr);
 
-  auto randBytes = Kleidos::generateSalt();
-  std::println("{}", randBytes);
+  auto salt = Kleidos::generateRandomBytes(10);
+  std::println("{}", salt);
 
-  auto key = Kleidos::deriveKey(passStr, randBytes);
+  auto key = Kleidos::deriveKey(passStr, salt);
   std::println("{}", key);
 
   std::memset(mPass.data(), 0, mPass.size());
@@ -60,19 +60,19 @@ std::vector<char> Kleidos::promptMasterPassword() {
 }
 
 /**
- * Generate cryptograhically secure salt value from /dev/urandom
+ * Generate cryptograhically secure random bytes used for salt and nonce
  *
- * Uses Linux' urandom to generate a bytes for the header of the DB file.
+ * Uses openssl to generate a bytes for the header of the DB file.
  *
  * @param size_t length
  * @return std::vector<uint8_t> salt
  */
-std::vector<uint8_t> Kleidos::generateSalt(size_t length) {
-  std::vector<uint8_t> salt(length);
-  if (RAND_bytes(salt.data(), static_cast<int>(length)) != 1) {
+std::vector<uint8_t> Kleidos::generateRandomBytes(size_t length) {
+  std::vector<uint8_t> rndBytes(length);
+  if (RAND_bytes(rndBytes.data(), static_cast<int>(length)) != 1) {
     throw std::runtime_error("RAND_bytes failed!");
   }
-  return salt;
+  return rndBytes;
 }
 
 /**

@@ -15,13 +15,8 @@ class Kleidos {
 
     std::vector<char> promptMasterPassword();
 
-    std::vector<uint8_t> generateSalt(size_t length=10);
-
+    std::vector<uint8_t> generateRandomBytes(size_t length);
     std::vector<uint8_t> deriveKey(const std::string& password, const std::vector<uint8_t>& salt, size_t keyLen=32);
-    // Hint: use memory-hard KDF (e.g., Argon2id) with proper parameters
-
-    std::vector<uint8_t> generateNonce(size_t length=12);
-    // Hint: unique nonce for encryption, may be per vault or per entry
 
     // Header & Metadata
     void createVaultHeader(const std::vector<uint8_t>& salt, const std::vector<uint8_t>& nonce);
