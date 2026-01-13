@@ -8,10 +8,19 @@
 
 class Kleidos {
   public:
-    // Called by user to create a new vault.
+    /**
+     * App initialization.
+     *
+     * Called by user to create a new vault.
+     * Gets the master password. Generates the cryptographic params,
+     * derives the key, creates the header, 
+     * and writes the vault file.
+     *
+     * @TODO: Implement the necessary functions from private part of the class.
+     *
+     * @return void
+     */
     void init();
-    // Hint: orchestrates the whole vault creation process
-    // Steps: get master password, generate cryptographic params, derive key, create header, write file
 
   private:
     struct TerminalGuard {
@@ -20,9 +29,18 @@ class Kleidos {
       ~TerminalGuard() { tcsetattr(STDIN_FILENO, TCSANOW, &oldt); }
     };
 
-    // Prompt & Validate Master Secret
+    /**
+     * Prompt & Validate Master Password``
+     *
+     * Disables echo on terminal, promps input, 
+     * stores the password in a vector of chars,
+     * due to memory behavior of a string
+     * restores terminal to standard
+     * @TODO: Implement password matching, if database file exists.
+     *
+     * @return std::vector<char> password;
+     */
     std::vector<char> promptMasterPassword();
-    // Hint: securely read password from stdin without echo, confirm password matches
 
     // Cryptographic setup
     std::vector<uint8_t> generateSalt(size_t length=10);
