@@ -14,12 +14,11 @@ class Kleidos {
     };
 
     std::vector<char> promptMasterPassword();
-
     std::vector<uint8_t> generateRandomBytes(size_t length);
     std::vector<uint8_t> deriveKey(const std::string& password, const std::vector<uint8_t>& salt, size_t keyLen=32);
 
     // Header & Metadata
-    void createVaultHeader(const std::vector<uint8_t>& salt, const std::vector<uint8_t>& nonce);
+    std::vector<uint8_t> createVaultHeader(const std::vector<uint8_t>& salt, const std::vector<uint8_t>& nonce);
     // Hint: store vault format version, salt, KDF params, nonces
     // Header may be partially plaintext but must allow safe unlocking later
     

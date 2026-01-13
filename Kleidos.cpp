@@ -14,14 +14,14 @@
  */
 void Kleidos::init() {
   auto mPass = Kleidos::promptMasterPassword();
-  std::string passStr(mPass.begin(), mPass.end());
-  std::println("{}", passStr);
-
   auto salt = Kleidos::generateRandomBytes(10);
-  std::println("{}", salt);
+  auto key = Kleidos::deriveKey(std::string(mPass.begin(), mPass.end()), salt);
+  auto nonce = Kleidos::generateRandomBytes(12);
 
-  auto key = Kleidos::deriveKey(passStr, salt);
+  auto header = Kleidos::createVaultHeader(salt, nonce);
+
   std::println("{}", key);
+  std::println("{}", header);
 
   std::memset(mPass.data(), 0, mPass.size());
 }
@@ -102,3 +102,44 @@ std::vector<uint8_t> Kleidos::deriveKey(const std::string& password, const std::
   }
   return key;
 }
+
+std::vector<uint8_t> Kleidos::createVaultHeader(const std::vector<uint8_t>& salt, const std::vector<uint8_t>& nonce) {
+  std::vector<uint8_t> header;
+  header.reserve(64);
+
+  // Magic
+  const uint8_t magic[4] = {'K', 'L', 'E', 'I'};
+  header.insert(header.end(), magic, magic+4);
+
+  // Version
+  uint16_t version = 1;
+  header.push_back(static_cast<uint8_t>(version >> 8));
+  header.push_back(static_cast<uint8_t>(version));
+
+  // Argon2id parameters (example values)
+  uint32_t m_cost = 1 << 16;
+  uint32_t t_cost = 3;
+  uint32_t parallelism = 1;
+
+  auto push_u32 = [&header](uint32_t v) {
+    header.push_back(v >> 24);
+    header.push_back(v >> 16);
+    header.push_back(v >> 8);
+    header.push_back(v);
+  };
+
+  push_u32(m_cost);
+  push_u32(t_cost);
+  push_u32(parallelism);
+
+  // Salt
+  header.push_back(static_cast<uint8_t>(salt.size()));
+  header.insert(header.end(), salt.begin(), salt.end());
+
+  // Nonce
+  header.push_back(static_cast<uint8_t>(nonce.size()));
+  header.insert(header.end(), nonce.begin(), nonce.end());
+
+  return header;
+}
+
