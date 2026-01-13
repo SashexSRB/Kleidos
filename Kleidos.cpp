@@ -3,6 +3,19 @@
 #include <iostream>
 #include <cstring>
 
+
+/**
+ * App initialization.
+ *
+ * Called by user to create a new vault.
+ * Gets the master password. Generates the cryptographic params,
+ * derives the key, creates the header, 
+ * and writes the vault file.
+ *
+ * @TODO: Implement the necessary functions from private part of the class.
+ *
+ * @return void
+ */
 void Kleidos::init() {
   std::println("Hello World!");
   auto mPass = Kleidos::promptMasterPassword();
@@ -12,6 +25,17 @@ void Kleidos::init() {
   std::memset(mPass.data(), 0, mPass.size());
 }
 
+/**
+ * Prompt & Validate Master Password``
+ *
+ * Disables echo on terminal, promps input, 
+ * stores the password in a vector of chars,
+ * due to memory behavior of a string
+ * restores terminal to standard
+ * @TODO: Implement password matching, if database file exists.
+ *
+ * @return std::vector<char> password;
+ */
 std::vector<char> Kleidos::promptMasterPassword() {
   std::cout << "Enter Master Password: "; 
 
