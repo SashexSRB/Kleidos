@@ -1,7 +1,6 @@
 #pragma once
 
 #include "KldIncludes.h"
-#include <sodium/crypto_pwhash.h>
 
 class Kleidos {
 public:
