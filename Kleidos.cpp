@@ -103,6 +103,18 @@ std::vector<uint8_t> Kleidos::deriveKey(const std::string& password, const std::
   return key;
 }
 
+/**
+ * Generates a vault header for the vault file in order to derive the key from it. The workflow in mind:
+ * 1. Password input
+ * 2. Header (plaintext) -> contains everything needed to re-derive the key (KDF algo identifier, KDF params, salt)
+ * 3. deriveKey(password, salt, keyLength) -> produces the key
+ * 4. Key -> used only for encryption/decryption of vault data, never written to disk
+ *
+ * @param const std::vector<uint8_t>& salt
+ * @param const std::vector<uint8_t>& nonce
+ *
+ * @return std::vector<uint8_t> header
+ */
 std::vector<uint8_t> Kleidos::createVaultHeader(const std::vector<uint8_t>& salt, const std::vector<uint8_t>& nonce) {
   std::vector<uint8_t> header;
   header.reserve(64);
