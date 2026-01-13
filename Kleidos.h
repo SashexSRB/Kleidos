@@ -47,18 +47,12 @@ private:
     const std::vector<uint8_t>& ciphertext
   );
 
-  static uint16_t read_u16(
+  template<typename T>
+  static T read_uint(
     std::ifstream& f,
     std::vector<uint8_t>& raw
   );
-  static uint32_t read_u32(
-    std::ifstream& f,
-    std::vector<uint8_t>& raw
-  );
-  static uint64_t read_u64(
-    std::ifstream& f,
-    std::vector<uint8_t>& raw
-  );
+
   VaultHeader readVaultHeader(std::ifstream& file);
   void unlock(const std::string& filename);
 };

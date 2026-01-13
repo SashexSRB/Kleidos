@@ -34,6 +34,8 @@ void Kleidos::init() {
 
   std::memset(pass.data(), 0, pass.size());
   sodium_memzero(key.data(), key.size());
+
+  std::cout << "Vault initialized successfully\n";
 }
 
 /**
@@ -241,59 +243,27 @@ void Kleidos::writeVaultFile(
 }
 
 /**
- * Helper function to read uint16_t values from the header
+ * Helper function template to read unsigned int values from header. Replaced the read_u16, read_u32 and read_u64.
  *
  * @param std::ifstream& f
  * @param std::vector<uint8_t>& raw
  *
- * @return... some fuckery.
+ * return T value;
  */
-uint16_t Kleidos::read_u16(
-  std::ifstream& f,
+template<typename T>
+T Kleidos::read_uint(
+  std::ifstream& f, 
   std::vector<uint8_t>& raw
   ) {
-  uint8_t b[2]; f.read(reinterpret_cast<char*>(b), 2);
-  raw.insert(raw.end(), b, b+2);
-  return (uint16_t(b[0]) << 8) | b[1];
-}
+  uint8_t buffer[sizeof(T)];
+  f.read(reinterpret_cast<char*>(buffer), sizeof(T));
+  raw.insert(raw.end(), buffer, buffer + sizeof(T));
 
-
-/**
- * Helper function to read uint32_t values from the header
- *
- * @param std::ifstream& f
- * @param std::vector<uint8_t>& raw
- *
- * @return... some fuckery.
- */
-uint32_t Kleidos::read_u32(
-  std::ifstream& f,
-  std::vector<uint8_t>& raw
-  ) {
-  uint8_t b[4]; f.read(reinterpret_cast<char*>(b), 4);
-  raw.insert(raw.end(),b,b+4);
-  return (uint32_t(b[0]) << 24) | (uint32_t(b[1]) << 16) |
-         (uint32_t(b[2]) << 8)  | b[3];
-}
-
-
-/**
- * Helper function to read uint64_t values from the header
- *
- * @param std::ifstream& f
- * @param std::vector<uint8_t>& raw
- *
- * @return v
- */
-uint64_t Kleidos::read_u64(
-  std::ifstream& f,
-  std::vector<uint8_t>& raw
-  ) {
-  uint8_t b[8]; f.read(reinterpret_cast<char*>(b), 8);
-  raw.insert(raw.end(),b,b+8);
-  uint64_t v = 0;
-  for (int i = 0; i < 8; ++i) v = (v << 8) | b[i];
-  return v;
+  T value = 0;
+  for (size_t i = 0; i < sizeof(T); ++i) {
+    value = (value << 8) | buffer[i];
+  }
+  return value;
 }
 
 /**
@@ -315,7 +285,7 @@ Kleidos::VaultHeader Kleidos::readVaultHeader(std::ifstream& file) {
     throw std::runtime_error("Invalid vault magic");
   
   // Version
-  h.version = read_u16(file, h.raw);
+  h.version = read_uint<uint16_t>(file, h.raw);
   if (h.version != 1)
     throw std::runtime_error("Unsupported vault version");
 
@@ -328,9 +298,9 @@ Kleidos::VaultHeader Kleidos::readVaultHeader(std::ifstream& file) {
     throw std::runtime_error("Unsupported KDF");
 
   // KDF params
-  h.opslimit = read_u64(file, h.raw);
-  h.memlimit = read_u64(file, h.raw);
-  h.parallelism = read_u32(file, h.raw);
+  h.opslimit = read_uint<uint64_t>(file, h.raw);
+  h.memlimit = read_uint<uint64_t>(file, h.raw);
+  h.parallelism = read_uint<uint32_t>(file, h.raw);
 
   // Salt
   uint8_t saltLen;
