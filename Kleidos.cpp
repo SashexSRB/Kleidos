@@ -277,9 +277,14 @@ Kleidos::VaultHeader Kleidos::readVaultHeader(std::ifstream& file) {
   VaultHeader h;
   h.raw.clear();
 
+  auto ensure = [&file]() {
+    if (!file) throw std::runtime_error("Unexpected end of vault file");
+  };
+
   // Magic
   uint8_t magic[4];
   file.read(reinterpret_cast<char*>(magic),4);
+  ensure();
   h.raw.insert(h.raw.end(),magic,magic+4);
   if (std::memcmp(magic,"KLEI",4) != 0)
     throw std::runtime_error("Invalid vault magic");
@@ -292,6 +297,7 @@ Kleidos::VaultHeader Kleidos::readVaultHeader(std::ifstream& file) {
   // KDF id
   uint8_t kdf;
   file.read(reinterpret_cast<char*>(&kdf),1);
+  ensure();
   h.raw.push_back(kdf);
   h.kdf_id = kdf;
   if (h.kdf_id != 1)
@@ -299,24 +305,49 @@ Kleidos::VaultHeader Kleidos::readVaultHeader(std::ifstream& file) {
 
   // KDF params
   h.opslimit = read_uint<uint64_t>(file, h.raw);
-  h.memlimit = read_uint<uint64_t>(file, h.raw);
-  h.parallelism = read_uint<uint32_t>(file, h.raw);
+  if (h.opslimit < crypto_pwhash_OPSLIMIT_MIN) 
+    throw std::runtime_error("opslimit too low");
 
+  h.memlimit = read_uint<uint64_t>(file, h.raw);
+  if (h.memlimit < crypto_pwhash_MEMLIMIT_MIN || h.memlimit > (1ULL << 30))
+    throw std::runtime_error("memlimit out of range");
+
+  h.parallelism = read_uint<uint32_t>(file, h.raw);
+  if(h.parallelism == 0 || h.parallelism > 16)
+    throw std::runtime_error("Invalid Argon2 parallelism");
+  
   // Salt
   uint8_t saltLen;
+
   file.read(reinterpret_cast<char*>(&saltLen), 1);
+  ensure();
   h.raw.push_back(saltLen);
   h.salt.resize(saltLen);
+
+  if (saltLen != crypto_pwhash_SALTBYTES)
+    throw std::runtime_error("Invalid salt length");
+
   file.read(reinterpret_cast<char*>(h.salt.data()), saltLen);
+  ensure();
   h.raw.insert(h.raw.end(), h.salt.begin(), h.salt.end());
 
   // Nonce
   uint8_t nonceLen;
+
   file.read(reinterpret_cast<char*>(&nonceLen),1);
+  ensure();
   h.raw.push_back(nonceLen);
   h.nonce.resize(nonceLen);
+
+  if (nonceLen != crypto_aead_chacha20poly1305_ietf_NPUBBYTES)
+    throw std::runtime_error("Invalid nonce length");
+
   file.read(reinterpret_cast<char*>(h.nonce.data()), nonceLen);
+  ensure();
   h.raw.insert(h.raw.end(), h.nonce.begin(), h.nonce.end());
+
+  if (h.raw.size() > 256)
+    throw std::runtime_error("Header too large");
 
   return h;
 }
