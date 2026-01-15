@@ -7,6 +7,12 @@ public:
   void init();
   void run();
 
+  struct VaultMeta {
+    uint32_t metaVersion;
+    uint64_t createdAt;
+    uint32_t flags;
+  };
+
 private:
   struct TerminalGuard {
     termios oldt;
@@ -55,4 +61,6 @@ private:
 
   VaultHeader readVaultHeader(std::ifstream& file);
   void unlock(const std::string& filename);
+
+  std::vector<uint8_t> serializeMeta(const VaultMeta& m);
 };

@@ -17,13 +17,20 @@ void Kleidos::init() {
 
   auto key = Kleidos::deriveKey(std::string(pass.begin(), pass.end()), salt);
   auto header = Kleidos::createVaultHeader(salt, nonce);
+ 
+  VaultMeta meta;
+  meta.metaVersion = 1;
+  meta.createdAt = static_cast<uint64_t>(std::time(nullptr));
+  meta.flags = 0;
 
-  std::vector<uint8_t> ciphertext(canary.size() + crypto_aead_chacha20poly1305_ietf_ABYTES);
+  auto metaBytes = Kleidos::serializeMeta(meta);
+
+  std::vector<uint8_t> ciphertext(metaBytes.size() + crypto_aead_chacha20poly1305_ietf_ABYTES);
   unsigned long long clen;
 
   crypto_aead_chacha20poly1305_ietf_encrypt(
     ciphertext.data(), &clen,
-    reinterpret_cast<const uint8_t*>(canary.data()), canary.size(),
+    metaBytes.data(), metaBytes.size(),
     header.data(), header.size(),
     nullptr,
     nonce.data(),
@@ -409,14 +416,55 @@ void Kleidos::unlock(const std::string& filename) {
 
   plaintext.resize(plen);
 
-  // 6. verify canary
-  if (std::string(plaintext.begin(), plaintext.end()) != canary) {
-    throw std::runtime_error("Vault authentication failed");
+  // 6. verify metadata
+  VaultMeta meta;
+  size_t offset = 0;
+
+  // metaVersion
+  meta.metaVersion = (plaintext[offset] << 24) | (plaintext[offset+1] << 16) |
+                    (plaintext[offset+2] << 8) | plaintext[offset+3];
+  offset += 4;
+
+  if (meta.metaVersion != 1)
+    throw std::runtime_error("Unsupported metadata version");
+
+  // createdAt
+  meta.createdAt = 0;
+  for (int i = 0; i < 8; ++i) {
+      meta.createdAt = (meta.createdAt << 8) | plaintext[offset + i];
   }
+  offset += 8;
+
+  // flags
+  meta.flags = (plaintext[offset] << 24) | (plaintext[offset+1] << 16) |
+              (plaintext[offset+2] << 8) | plaintext[offset+3];
+  offset += 4;
 
   // Cleanup
   sodium_memzero(key.data(), key.size());
   sodium_memzero(pass.data(), pass.size());
 
   std::cout << "Vault unlocked successfuly\n";
+}
+
+std::vector<uint8_t> Kleidos::serializeMeta(const Kleidos::VaultMeta& m) {
+  std::vector<uint8_t> out;
+
+  auto push_u32 = [&out](uint32_t v) {
+    out.push_back(v >> 24);
+    out.push_back(v >> 16);
+    out.push_back(v >> 8);
+    out.push_back(v);
+  };
+
+  auto push_u64 = [&out](uint64_t v) {
+    for (int i = 7; i >= 0; --i)
+      out.push_back(v >> (i * 8));
+  };
+
+  push_u32(m.metaVersion);
+  push_u64(m.createdAt);
+  push_u32(m.flags);
+
+  return out;
 }
