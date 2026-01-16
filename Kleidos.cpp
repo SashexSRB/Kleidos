@@ -7,8 +7,6 @@
  * Gets the master password. Generates the cryptographic params,
  * derives the key, creates the header, 
  * and writes the vault file.
- *
- * @return void
  */
 void Kleidos::init() {
   auto pass = Kleidos::promptMasterPassword();
@@ -23,14 +21,21 @@ void Kleidos::init() {
   meta.createdAt = static_cast<uint64_t>(std::time(nullptr));
   meta.flags = 0;
 
+  std::vector<VaultEntry> entries;
   auto metaBytes = Kleidos::serializeMeta(meta);
+  auto entryBytes = Kleidos::serializeEntries(entries);
 
-  std::vector<uint8_t> ciphertext(metaBytes.size() + crypto_aead_chacha20poly1305_ietf_ABYTES);
+  std::vector<uint8_t> payload;
+  payload.reserve(metaBytes.size() + entryBytes.size());
+  payload.insert(payload.end(), metaBytes.begin(), metaBytes.end());
+  payload.insert(payload.end(), entryBytes.begin(), entryBytes.end());
+
+  std::vector<uint8_t> ciphertext(payload.size() + crypto_aead_chacha20poly1305_ietf_ABYTES);
   unsigned long long clen;
 
   crypto_aead_chacha20poly1305_ietf_encrypt(
     ciphertext.data(), &clen,
-    metaBytes.data(), metaBytes.size(),
+    payload.data(), payload.size(),
     header.data(), header.size(),
     nullptr,
     nonce.data(),
@@ -47,8 +52,6 @@ void Kleidos::init() {
 
 /**
  * Function called in the entry point which decides if init or unlock is necessary.
- *
- * @return void
  */
 void Kleidos::run() {
   const std::string vaultFile = "vault.kle";
@@ -68,8 +71,6 @@ void Kleidos::run() {
  * stores the password in a vector of chars,
  * due to memory behavior of a string
  * restores terminal to standard
- *
- * @return std::vector<char> password;
  */
 std::vector<char> Kleidos::promptMasterPassword() {
   std::cout << "Enter Master Password: "; 
@@ -97,7 +98,6 @@ std::vector<char> Kleidos::promptMasterPassword() {
  * Uses openssl to generate a bytes for the header of the DB file.
  *
  * @param size_t length
- * @return std::vector<uint8_t> salt
  */
 std::vector<uint8_t> Kleidos::generateRandomBytes(size_t length) {
   std::vector<uint8_t> rndBytes(length);
@@ -115,8 +115,6 @@ std::vector<uint8_t> Kleidos::generateRandomBytes(size_t length) {
  * @param const std::string& password
  * @param const std::vector<uint8_t>& salt
  * @param size_t keyLen = 32
- *
- * @return std::vector<uint8_t> key
  */
 std::vector<uint8_t> Kleidos::deriveKey(
   const std::string& password, 
@@ -148,8 +146,6 @@ std::vector<uint8_t> Kleidos::deriveKey(
  *
  * @param const std::vector<uint8_t>& salt
  * @param const std::vector<uint8_t>& nonce
- *
- * @return std::vector<uint8_t> header
  */
 std::vector<uint8_t> Kleidos::createVaultHeader(
   const std::vector<uint8_t>& salt, 
@@ -209,8 +205,6 @@ std::vector<uint8_t> Kleidos::createVaultHeader(
  * @param const std::string& filename
  * @param const std::vector<uint8_t>& header
  * @param const std::vector<uint8_t>& ciphertext
- *
- * @return void
  */
 void Kleidos::writeVaultFile(
   const std::string& filename,
@@ -254,8 +248,6 @@ void Kleidos::writeVaultFile(
  *
  * @param std::ifstream& f
  * @param std::vector<uint8_t>& raw
- *
- * return T value;
  */
 template<typename T>
 T Kleidos::read_uint(
@@ -277,8 +269,6 @@ T Kleidos::read_uint(
  * Function to read the vault file's header for the data necessary.
  *
  * @param std::ifstream& file
- *
- * @return VaultHeader h
  */
 Kleidos::VaultHeader Kleidos::readVaultHeader(std::ifstream& file) {
   VaultHeader h;
@@ -364,8 +354,6 @@ Kleidos::VaultHeader Kleidos::readVaultHeader(std::ifstream& file) {
  * Called by the run() function in main
  *
  * @param const std::string& filename
- *
- * @return void
  */
 void Kleidos::unlock(const std::string& filename) {
   std::ifstream file(filename, std::ios::binary);
@@ -447,6 +435,11 @@ void Kleidos::unlock(const std::string& filename) {
   std::cout << "Vault unlocked successfuly\n";
 }
 
+/**
+ * Function to serialize vault meta informations
+ *
+ * @param const Kleidos::VaultMeta& m
+ */
 std::vector<uint8_t> Kleidos::serializeMeta(const Kleidos::VaultMeta& m) {
   std::vector<uint8_t> out;
 
@@ -468,3 +461,63 @@ std::vector<uint8_t> Kleidos::serializeMeta(const Kleidos::VaultMeta& m) {
 
   return out;
 }
+
+/**
+ * Function to serialize vault entries for storage in the vault.
+ *
+ * @param const std::vector<VaultEntry>& entries
+ */
+std::vector<uint8_t> Kleidos::serializeEntries(const std::vector<VaultEntry>& entries) {
+  std::vector<uint8_t> out;
+
+  for (const auto& e : entries) {
+    uint16_t keyLen = e.key.size();
+    uint16_t valLen = e.value.size();
+
+    // Write key length
+    out.push_back(keyLen >> 0);
+    out.push_back(keyLen & 0xFF);
+    // Write key bytes
+    out.insert(out.end(), e.key.begin(), e.key.end());
+
+    // Write value length
+    out.push_back(valLen >> 0);
+    out.push_back(valLen & 0xFF);
+    // Write value bytes
+    out.insert(out.end(), e.value.begin(), e.value.end());
+  }
+
+  return out;
+}
+
+/**
+ * Function to deserialize vault entries from decrypted payload
+ *
+ * @param const std::vector<uint8_t>& data
+ */
+std::vector<Kleidos::VaultEntry> Kleidos::deserializeEntries(const std::vector<uint8_t>& data) {
+  std::vector<VaultEntry> entries;
+  size_t offset = 0;
+
+  while (offset + 4 <= data.size()) {
+    uint16_t keyLen = (data[offset] << 8) | data[offset + 1];
+    offset += 2;
+
+    if (offset + keyLen + 2 > data.size()) break;
+
+    std::string key(data.begin() + offset, data.begin() + offset + keyLen);
+    offset += keyLen;
+
+    uint16_t valLen = (data[offset] << 8) | data[offset + 1];
+    offset += 2;
+
+    if (offset + valLen > data.size()) break;
+
+    std::string value(data.begin() + offset, data.begin() + offset + valLen);
+    offset += valLen;
+
+    entries.push_back({key, value});
+  }
+
+  return entries;
+};

@@ -31,6 +31,11 @@ private:
     std::vector<uint8_t> raw; // exact bytes as read (for AEAD AD)
   };
 
+  struct VaultEntry {
+    std::string key;
+    std::string value;
+  };
+
   static constexpr uint64_t KDF_OPS = crypto_pwhash_OPSLIMIT_INTERACTIVE;
   static constexpr uint64_t KDF_MEM = crypto_pwhash_MEMLIMIT_INTERACTIVE;
   static constexpr uint32_t KDF_PAR = 1;
@@ -52,6 +57,8 @@ private:
     const std::vector<uint8_t>& header,
     const std::vector<uint8_t>& ciphertext
   );
+  std::vector<uint8_t> serializeEntries(const std::vector<VaultEntry>& entries);
+  std::vector<VaultEntry> deserializeEntries(const std::vector<uint8_t>& data);
 
   template<typename T>
   static T read_uint(
