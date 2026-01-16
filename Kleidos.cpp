@@ -528,3 +528,100 @@ std::vector<Kleidos::VaultEntry> Kleidos::deserializeEntries(const std::vector<u
 
   return entries;
 };
+
+/**
+ * Add a new entry to the vault in memory
+ *
+ * @param std::vector<VaultEntry>& entries
+ * @param const std::string& key,
+ * @param const std::string& value
+ */
+void Kleidos::addEntry(std::vector<VaultEntry>& entries, const std::string& key, const std::string& value) {
+  entries.push_back({key, value});
+}
+
+/**
+ * Update an existing entry by key
+ *
+ * @param std::vector<VaultEntry>& entries,
+ * @param const std::string& key,
+ * @param const std::string& newValue
+ */
+bool Kleidos::updateEntry(std::vector<VaultEntry>& entries, const std::string& key, const std::string& newValue) {
+  for (auto& e : entries) {
+    if (e.key == key) {
+      e.value = newValue;
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Remove an entry by key
+ * 
+ * @param std::vector<VaultEntry>& entries
+ * @param const std::string& key
+ */
+bool Kleidos::removeEntry(std::vector<VaultEntry>& entries, const std::string& key) {
+  auto it = std::remove_if(
+    entries.begin(), 
+    entries.end(),
+    [&](const VaultEntry& e) {
+      return e.key == key;
+    }
+  );
+
+  if (it != entries.end()) {
+    entries.erase(it, entries.end());
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Saves the vault in the file.
+ *
+ * const std::string& filename
+ * const VaultHeader& header,
+ * const VaultMeta& meta,
+ * const std::vector<VaultEntry>& entries,
+ * const std::vector<uint8_t>& key
+ */
+void Kleidos::saveVault(
+  const std::string& filename,
+  const VaultHeader& header,
+  const VaultMeta& meta,
+  const std::vector<VaultEntry>& entries,
+  const std::vector<uint8_t>& key
+  ) {
+  // Serialize metadata
+  auto metaBytes = serializeMeta(meta);
+
+  // Serialize entries
+  auto entryBytes = serializeEntries(entries);
+
+  // Concatenate metadata + entries
+  std::vector<uint8_t> plaintext;
+  plaintext.reserve(metaBytes.size() + entryBytes.size());
+  plaintext.insert(plaintext.end(), metaBytes.begin(), metaBytes.end());
+  plaintext.insert(plaintext.end(), entryBytes.begin(), entryBytes.end());
+
+  // Encrypt the full payload
+  std::vector<uint8_t> ciphertext(plaintext.size() + crypto_aead_chacha20poly1305_ietf_ABYTES);
+  unsigned long long clen;
+
+  if (crypto_aead_chacha20poly1305_ietf_encrypt(
+    ciphertext.data(), &clen,
+    plaintext.data(), plaintext.size(),
+    header.raw.data(), header.raw.size(),
+    nullptr,
+    header.nonce.data(),
+    key.data()
+  ) != 0) {
+    throw std::runtime_error("Vault encryption failed");
+  };
+
+  // Write vault file
+  writeVaultFile(filename, header.raw, ciphertext);
+}

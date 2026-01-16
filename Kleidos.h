@@ -57,8 +57,6 @@ private:
     const std::vector<uint8_t>& header,
     const std::vector<uint8_t>& ciphertext
   );
-  std::vector<uint8_t> serializeEntries(const std::vector<VaultEntry>& entries);
-  std::vector<VaultEntry> deserializeEntries(const std::vector<uint8_t>& data);
 
   template<typename T>
   static T read_uint(
@@ -70,4 +68,27 @@ private:
   void unlock(const std::string& filename);
 
   std::vector<uint8_t> serializeMeta(const VaultMeta& m);
+  std::vector<uint8_t> serializeEntries(const std::vector<VaultEntry>& entries);
+  std::vector<VaultEntry> deserializeEntries(const std::vector<uint8_t>& data);
+  void addEntry(
+    std::vector<VaultEntry>& entries,
+    const std::string& key,
+    const std::string& value
+  );
+  bool updateEntry(
+    std::vector<VaultEntry>& entries,
+    const std::string& key,
+    const std::string& newValue
+  );
+  bool removeEntry(
+    std::vector<VaultEntry>& entries,
+    const std::string& key
+  );
+  void saveVault(
+    const std::string& filename,
+    const VaultHeader& header,
+    const VaultMeta& meta,
+    const std::vector<VaultEntry>& entries,
+    const std::vector<uint8_t>& key
+  );
 };
