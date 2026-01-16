@@ -625,13 +625,13 @@ std::vector<uint8_t> Kleidos::serializeEntries(const std::vector<VaultEntry>& en
     uint16_t valLen = e.value.size();
 
     // Write key length
-    out.push_back(keyLen >> 0);
+    out.push_back(keyLen >> 8);
     out.push_back(keyLen & 0xFF);
     // Write key bytes
     out.insert(out.end(), e.key.begin(), e.key.end());
 
     // Write value length
-    out.push_back(valLen >> 0);
+    out.push_back(valLen >> 8);
     out.push_back(valLen & 0xFF);
     // Write value bytes
     out.insert(out.end(), e.value.begin(), e.value.end());
