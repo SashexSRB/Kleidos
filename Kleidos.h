@@ -48,6 +48,13 @@ private:
   static constexpr uint32_t KDF_PAR = 1;
   const std::string canary = "KLEIDOS_VAULT_OK";
 
+  inline std::string getVaultPath() {
+    const char* home = std::getenv("HOME");
+    if (!home) {
+      throw std::runtime_error("HOME env not set");
+    }
+    return std::string(home) + "/.vault.kle";
+  }
   std::vector<char> promptMasterPassword();
   std::vector<uint8_t> generateRandomBytes(size_t length);
   std::vector<uint8_t> deriveKey(

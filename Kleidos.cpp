@@ -42,7 +42,7 @@ void Kleidos::init() {
     key.data()
   );
 
-  writeVaultFile("vault.kle", header, ciphertext);
+  writeVaultFile(getVaultPath(), header, ciphertext);
 
   std::memset(pass.data(), 0, pass.size());
   sodium_memzero(key.data(), key.size());
@@ -68,7 +68,7 @@ void clearScreen() {
  */
 void Kleidos::run() {
   clearScreen();
-  const std::string vaultFile = "vault.kle";
+  const std::string vaultFile = getVaultPath();
 
   std::ifstream file(vaultFile, std::ios::binary);
   if (!file.good()) {
