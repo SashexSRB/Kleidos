@@ -428,6 +428,10 @@ void Kleidos::unlock(const std::string& filename) {
               (plaintext[offset+2] << 8) | plaintext[offset+3];
   offset += 4;
 
+  // 7. Deserialize Entries
+  std::vector<uint8_t> entryData(plaintext.begin() + offset, plaintext.end());
+  auto entries = Kleidos::deserializeEntries(entryData);
+
   // Cleanup
   sodium_memzero(key.data(), key.size());
   sodium_memzero(pass.data(), pass.size());
