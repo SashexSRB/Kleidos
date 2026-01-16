@@ -36,6 +36,13 @@ private:
     std::string value;
   };
 
+  struct UnlockResult {
+    VaultHeader header;
+    VaultMeta meta;
+    std::vector<uint8_t> key;
+    std::vector<VaultEntry> entries;
+  };
+
   static constexpr uint64_t KDF_OPS = crypto_pwhash_OPSLIMIT_INTERACTIVE;
   static constexpr uint64_t KDF_MEM = crypto_pwhash_MEMLIMIT_INTERACTIVE;
   static constexpr uint32_t KDF_PAR = 1;
@@ -57,6 +64,11 @@ private:
     const std::vector<uint8_t>& header,
     const std::vector<uint8_t>& ciphertext
   );
+  void overwriteVaultFile(
+    const std::string& filename,
+    const std::vector<uint8_t>& header,
+    const std::vector<uint8_t>& ciphertext
+  );
 
   template<typename T>
   static T read_uint(
@@ -65,6 +77,7 @@ private:
   );
 
   VaultHeader readVaultHeader(std::ifstream& file);
+  UnlockResult unlockCore(const std::string& filename, const std::vector<char>& pass);
   void unlock(const std::string& filename);
 
   std::vector<uint8_t> serializeMeta(const VaultMeta& m);

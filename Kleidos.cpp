@@ -57,11 +57,86 @@ void Kleidos::run() {
   const std::string vaultFile = "vault.kle";
 
   std::ifstream file(vaultFile, std::ios::binary);
-  if (file.good()) {
-    unlock(vaultFile);
-  } else {
+  if (!file.good()) {
     init();
+    file.open(vaultFile, std::ios::binary);
+    if (!file.good()) throw std::runtime_error("Failed to open vault after init");
   }
+
+  // 1. Prompt password and unlock.
+  auto pass = promptMasterPassword();
+  UnlockResult vault = unlockCore(vaultFile, pass);
+
+  // 2. Main interactive loop.
+  bool running = true;
+  while (running) {
+    std::cout << "\nWelcome to Kleidos.\n"
+              << "1) List entires\n"
+              << "2) Add entry\n"
+              << "3) Update entry\n"
+              << "4) Remove entry\n"
+              << "5) Exit\n"
+              << "Choice: ";
+
+    int choice;
+    std::cin >> choice;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    std::string key, value;
+    switch (choice) {
+      case 1: // List entries 
+        if (vault.entries.empty()) {
+          std::cout << "No entries in vault.\n";
+        } else {
+          for (const auto& e : vault.entries) {
+            std::cout << e.key << " : " << e.value << "\n";
+          }
+        }
+      break;
+
+      case 2: // Add entry
+        std::cout << "Enter key: "; std::getline(std::cin, key);
+        std::cout << "Enter value: "; std::getline(std::cin, value);
+        addEntry(vault.entries, key, value);
+        saveVault(vaultFile, vault.header, vault.meta, vault.entries, vault.key);
+      break;
+
+      case 3: // Update entry
+        std::cout << "Enter key to update: "; std::getline(std::cin, key);
+        std::cout << "Enter new value: "; std::getline(std::cin, value);
+        if (updateEntry(vault.entries, key, value)) {
+          saveVault(vaultFile, vault.header, vault.meta, vault.entries, vault.key);
+          std::cout << "Entry updated.\n";
+        } else {
+          std::cout << "Key not found.\n";
+        }
+      break;
+
+      case 4: // Remove entry
+        std::cout << "Enter key to remove: ";
+        std::getline(std::cin, key);
+        if (removeEntry(vault.entries, key)) {
+          saveVault(vaultFile, vault.header, vault.meta, vault.entries, vault.key);
+          std::cout << "Entry removed.\n";
+        } else {
+          std::cout << "Key not found.\n";
+        }
+      break;
+
+      case 5:
+        running = false;
+        break;
+      break;
+
+      default:
+        std::cout << "Invalid choice\n";
+    }
+  }
+
+  sodium_memzero(vault.key.data(), vault.key.size());
+  sodium_memzero(pass.data(), pass.size());
+
+  std::cout << "Exiting Kleidos.\n";
 }
 
 /**
@@ -244,6 +319,38 @@ void Kleidos::writeVaultFile(
 }
 
 /**
+ * Overwrites the existing header file.
+ *
+ * @param const std::string& filename
+ * @param const std::vector<uint8_t>& header
+ * @param const std::vector<uint8_t>& ciphertext
+ */
+void Kleidos::overwriteVaultFile(const std::string& filename, const std::vector<uint8_t>& header, const std::vector<uint8_t>& ciphertext) {
+  std::ofstream file(filename, std::ios::binary | std::ios::out | std::ios::trunc);
+
+  if (!file) {
+    throw std::runtime_error("Failed to open vault file for overwrite");
+  }
+
+  file.write(reinterpret_cast<const char*>(header.data()), header.size());
+  if (!file) {
+    throw std::runtime_error("Failed to write vault header");
+  }
+
+  if (!ciphertext.empty()) {
+    file.write(reinterpret_cast<const char*>(ciphertext.data()), ciphertext.size());
+    if (!file) {
+      throw std::runtime_error("Failed to write vault payload");
+    }
+  }
+
+  file.flush();
+  if (!file) {
+    throw::std::runtime_error("Failed to write vault file");
+  }
+}
+
+/**
  * Helper function template to read unsigned int values from header. Replaced the read_u16, read_u32 and read_u64.
  *
  * @param std::ifstream& f
@@ -350,12 +457,13 @@ Kleidos::VaultHeader Kleidos::readVaultHeader(std::ifstream& file) {
 }
 
 /**
- * Function to unlock the vault for further usage
- * Called by the run() function in main
- *
+ * Function to unlock a vault and retrieve all useful data
+ * 
  * @param const std::string& filename
+ * @param const std::vector<char>& pass
+ *
  */
-void Kleidos::unlock(const std::string& filename) {
+Kleidos::UnlockResult Kleidos::unlockCore(const std::string& filename, const std::vector<char>& pass) {
   std::ifstream file(filename, std::ios::binary);
   if (!file) throw std::runtime_error("Failed to open vault file");
 
@@ -371,10 +479,7 @@ void Kleidos::unlock(const std::string& filename) {
   if (ciphertext.size() < crypto_aead_chacha20poly1305_ietf_ABYTES)
     throw std::runtime_error("Vault ciphertext truncated");
 
-  // 3. Prompt password
-  auto pass = promptMasterPassword();
-
-  // 4. Re-derive key using header params
+  // 3. Re-derive key using header params
   std::vector<uint8_t> key(32);
   if (crypto_pwhash(
     key.data(), key.size(),
@@ -387,7 +492,7 @@ void Kleidos::unlock(const std::string& filename) {
     throw std::runtime_error("Key derivation failed");
   };
 
-  // 5. Decrypt canary
+  // 5. Decrypt payload
   std::vector<uint8_t> plaintext(ciphertext.size());
   unsigned long long plen;
 
@@ -435,11 +540,25 @@ void Kleidos::unlock(const std::string& filename) {
   std::vector<uint8_t> entryData(plaintext.begin() + offset, plaintext.end());
   auto entries = Kleidos::deserializeEntries(entryData);
 
-  // Cleanup
-  sodium_memzero(key.data(), key.size());
-  sodium_memzero(pass.data(), pass.size());
+  return {header, meta, key, entries};
+}
 
-  std::cout << "Vault unlocked successfuly\n";
+
+/**
+ * Function to unlock the vault for further usage
+ * Called by the run() function in main
+ *
+ * @param const std::string& filename
+ */
+void Kleidos::unlock(const std::string& filename) {
+  auto pass = promptMasterPassword();
+  UnlockResult res = unlockCore(filename, pass);
+
+  std::cout << "Vault unlocked successfully\n";
+
+  // Cleanup
+  sodium_memzero(res.key.data(), res.key.size());
+  sodium_memzero(pass.data(), pass.size());
 }
 
 /**
@@ -623,5 +742,5 @@ void Kleidos::saveVault(
   };
 
   // Write vault file
-  writeVaultFile(filename, header.raw, ciphertext);
+  overwriteVaultFile(filename, header.raw, ciphertext);
 }
