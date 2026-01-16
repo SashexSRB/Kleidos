@@ -399,7 +399,10 @@ void Kleidos::unlock(const std::string& filename) {
     header.nonce.data(),
     key.data()
   ) != 0) {
-    throw std::runtime_error("Invalid password or corrupted vault");
+    std::cout << "Invalid password or corrupted vault\n";
+    sodium_memzero(key.data(), key.size());
+    sodium_memzero(key.data(), key.size());
+    std::exit(EXIT_FAILURE);
   };
 
   plaintext.resize(plen);
