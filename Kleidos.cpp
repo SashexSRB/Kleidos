@@ -50,10 +50,24 @@ void Kleidos::init() {
   std::cout << "Vault initialized successfully\n";
 }
 
+void pressEnterToContinue() {
+  std::cout << "\nPress ENTER to continue...";
+  std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+void clearScreen() {
+#ifdef _WIN32
+  std::system("cls");
+#else
+  std::system("clear");
+#endif
+}
+
 /**
  * Function called in the entry point which decides if init or unlock is necessary.
  */
 void Kleidos::run() {
+  clearScreen();
   const std::string vaultFile = "vault.kle";
 
   std::ifstream file(vaultFile, std::ios::binary);
@@ -92,6 +106,8 @@ void Kleidos::run() {
             std::cout << e.key << " : " << e.value << "\n";
           }
         }
+        pressEnterToContinue();
+        clearScreen();
       break;
 
       case 2: // Add entry
@@ -99,6 +115,8 @@ void Kleidos::run() {
         std::cout << "Enter value: "; std::getline(std::cin, value);
         addEntry(vault.entries, key, value);
         saveVault(vaultFile, vault.header, vault.meta, vault.entries, vault.key);
+        pressEnterToContinue();
+        clearScreen();
       break;
 
       case 3: // Update entry
@@ -110,6 +128,8 @@ void Kleidos::run() {
         } else {
           std::cout << "Key not found.\n";
         }
+        pressEnterToContinue();
+        clearScreen();
       break;
 
       case 4: // Remove entry
@@ -121,6 +141,8 @@ void Kleidos::run() {
         } else {
           std::cout << "Key not found.\n";
         }
+        pressEnterToContinue();
+        clearScreen();
       break;
 
       case 5:
@@ -130,6 +152,8 @@ void Kleidos::run() {
 
       default:
         std::cout << "Invalid choice\n";
+        pressEnterToContinue();
+        clearScreen();
     }
   }
 
