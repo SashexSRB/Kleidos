@@ -86,10 +86,11 @@ void Kleidos::run() {
   while (running) {
     std::cout << "\nWelcome to Kleidos.\n"
               << "1) List entires\n"
-              << "2) Add entry\n"
-              << "3) Update entry\n"
-              << "4) Remove entry\n"
-              << "5) Exit\n"
+              << "2) Find entry\n"
+              << "3) Add entry\n"
+              << "4) Update entry\n"
+              << "5) Remove entry\n"
+              << "6) Exit\n"
               << "Choice: ";
 
     int choice;
@@ -110,7 +111,23 @@ void Kleidos::run() {
         clearScreen();
       break;
 
-      case 2: // Add entry
+      case 2: // Find entry 
+        if (vault.entries.empty()) {
+          std::cout << "No entries in vault.\n";
+        } else {
+          std::cout << "Enter key: "; std::getline(std::cin, key);
+          for (const auto& e : vault.entries) {
+            if (key == e.key) {
+              std::cout << e.key << " : " << e.value << "\n";
+              break;
+            }
+          }
+        }
+        pressEnterToContinue();
+        clearScreen();
+      break;
+
+      case 3: // Add entry
         std::cout << "Enter key: "; std::getline(std::cin, key);
         std::cout << "Enter value: "; std::getline(std::cin, value);
         addEntry(vault.entries, key, value);
@@ -119,7 +136,7 @@ void Kleidos::run() {
         clearScreen();
       break;
 
-      case 3: // Update entry
+      case 4: // Update entry
         std::cout << "Enter key to update: "; std::getline(std::cin, key);
         std::cout << "Enter new value: "; std::getline(std::cin, value);
         if (updateEntry(vault.entries, key, value)) {
@@ -132,7 +149,7 @@ void Kleidos::run() {
         clearScreen();
       break;
 
-      case 4: // Remove entry
+      case 5: // Remove entry
         std::cout << "Enter key to remove: ";
         std::getline(std::cin, key);
         if (removeEntry(vault.entries, key)) {
@@ -145,7 +162,7 @@ void Kleidos::run() {
         clearScreen();
       break;
 
-      case 5:
+      case 6:
         running = false;
         break;
       break;
