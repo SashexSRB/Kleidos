@@ -55,6 +55,7 @@ private:
     }
     return std::string(home) + "/.vault.kle";
   }
+
   std::vector<char> promptMasterPassword();
   std::vector<uint8_t> generateRandomBytes(size_t length);
   std::vector<uint8_t> deriveKey(

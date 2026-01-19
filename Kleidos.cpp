@@ -50,11 +50,17 @@ void Kleidos::init() {
   std::cout << "Vault initialized successfully\n";
 }
 
+/**
+ * Small helper to print press enter to continute
+ */
 void pressEnterToContinue() {
   std::cout << "\nPress ENTER to continue...";
   std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
+/**
+ * Small helper to clear the screen
+ */
 void clearScreen() {
 #ifdef _WIN32
   std::system("cls");
