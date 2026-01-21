@@ -1,6 +1,6 @@
 #pragma once
 
-#include "KldIncludes.h"
+#include "KleIncludes.h"
 
 class Kleidos {
 public:
@@ -13,11 +13,9 @@ public:
     uint32_t flags;
   };
 
-private:
-  struct TerminalGuard {
-    termios oldt;
-    TerminalGuard() { tcgetattr(STDIN_FILENO, &oldt); }
-    ~TerminalGuard() { tcsetattr(STDIN_FILENO, TCSANOW, &oldt); }
+  struct VaultEntry {
+    std::string key;
+    std::string value;
   };
 
   struct VaultHeader {
@@ -31,11 +29,6 @@ private:
     std::vector<uint8_t> raw; // exact bytes as read (for AEAD AD)
   };
 
-  struct VaultEntry {
-    std::string key;
-    std::string value;
-  };
-
   struct UnlockResult {
     VaultHeader header;
     VaultMeta meta;
@@ -43,10 +36,30 @@ private:
     std::vector<VaultEntry> entries;
   };
 
-  static constexpr uint64_t KDF_OPS = crypto_pwhash_OPSLIMIT_INTERACTIVE;
-  static constexpr uint64_t KDF_MEM = crypto_pwhash_MEMLIMIT_INTERACTIVE;
-  static constexpr uint32_t KDF_PAR = 1;
-  const std::string canary = "KLEIDOS_VAULT_OK";
+  void addEntry(
+    std::vector<VaultEntry>& entries,
+    const std::string& key,
+    const std::string& value
+  );
+
+  bool updateEntry(
+    std::vector<VaultEntry>& entries,
+    const std::string& key,
+    const std::string& newValue
+  );
+
+  bool removeEntry(
+    std::vector<VaultEntry>& entries,
+    const std::string& key
+  );
+
+  void saveVault(
+    const std::string& filename,
+    const VaultHeader& header,
+    const VaultMeta& meta,
+    const std::vector<VaultEntry>& entries,
+    const std::vector<uint8_t>& key
+  );
 
   inline std::string getVaultPath() {
     const char* home = std::getenv("HOME");
@@ -58,6 +71,19 @@ private:
 
   std::vector<char> promptMasterPassword();
   std::vector<uint8_t> generateRandomBytes(size_t length);
+  UnlockResult unlockCore(const std::string& filename, const std::vector<char>& pass);
+
+private:
+  struct TerminalGuard {
+    termios oldt;
+    TerminalGuard() { tcgetattr(STDIN_FILENO, &oldt); }
+    ~TerminalGuard() { tcsetattr(STDIN_FILENO, TCSANOW, &oldt); }
+  };
+
+  static constexpr uint64_t KDF_OPS = crypto_pwhash_OPSLIMIT_INTERACTIVE;
+  static constexpr uint64_t KDF_MEM = crypto_pwhash_MEMLIMIT_INTERACTIVE;
+  static constexpr uint32_t KDF_PAR = 1;
+
   std::vector<uint8_t> deriveKey(
     const std::string& password,
     const std::vector<uint8_t>& salt,
@@ -85,31 +111,9 @@ private:
   );
 
   VaultHeader readVaultHeader(std::ifstream& file);
-  UnlockResult unlockCore(const std::string& filename, const std::vector<char>& pass);
   void unlock(const std::string& filename);
 
   std::vector<uint8_t> serializeMeta(const VaultMeta& m);
   std::vector<uint8_t> serializeEntries(const std::vector<VaultEntry>& entries);
   std::vector<VaultEntry> deserializeEntries(const std::vector<uint8_t>& data);
-  void addEntry(
-    std::vector<VaultEntry>& entries,
-    const std::string& key,
-    const std::string& value
-  );
-  bool updateEntry(
-    std::vector<VaultEntry>& entries,
-    const std::string& key,
-    const std::string& newValue
-  );
-  bool removeEntry(
-    std::vector<VaultEntry>& entries,
-    const std::string& key
-  );
-  void saveVault(
-    const std::string& filename,
-    const VaultHeader& header,
-    const VaultMeta& meta,
-    const std::vector<VaultEntry>& entries,
-    const std::vector<uint8_t>& key
-  );
 };
