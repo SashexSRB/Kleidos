@@ -65,7 +65,7 @@ void clearScreen() {
 #ifdef _WIN32
   std::system("cls");
 #else
-  std::system("clear");
+  [[maybe_unused]] int ret = std::system("clear");
 #endif
 }
 
